@@ -2,11 +2,3 @@ streamlit==1.35.0
 openai>=1.0.0
 python-dotenv
 requests
-pandas
-beautifulsoup4
-lxml
-PyPDF2
-pypdf
-tiktoken
-pyftpdlib
-pyautogen==0.2.25
