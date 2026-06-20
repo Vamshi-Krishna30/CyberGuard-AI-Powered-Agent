@@ -166,3 +166,16 @@ llm_working_folder/
 private/
 OAI_CONFIG.json
 logs.db
+# Never push these!
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+logs.db
+llm_working_folder/
+.DS_Store
+*.egg-info/
+dist/
+build/
+ 

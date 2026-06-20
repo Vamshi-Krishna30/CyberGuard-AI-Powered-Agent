@@ -8,6 +8,7 @@ working_folder = os.path.join(script_folder, "../" + utils.constants.LLM_WORKING
 llm_config = {
     "model": utils.constants.OPENAI_MODEL_NAME,
     "api_key": utils.constants.OPENAI_API_KEY,
+    "base_url": utils.constants.OPENAI_API_BASE,
     "cache_seed": None,
 }
 
