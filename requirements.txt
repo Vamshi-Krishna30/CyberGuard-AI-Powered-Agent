@@ -3,10 +3,10 @@ openai>=1.0.0
 python-dotenv
 requests
 pandas
-pyautogen==0.2.25
 beautifulsoup4
 lxml
 PyPDF2
 pypdf
 tiktoken
 pyftpdlib
+pyautogen==0.2.25
