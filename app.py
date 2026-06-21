@@ -326,7 +326,7 @@ def display_vt_result(parsed: dict, target: str):
 # ── Run NVISO agent (AUTOMATIC CLOUD DETECTION UPDATE) ────────────────────────
 def run_agent_scenario(scenario: str, project_path: str = None) -> tuple:
     # హగ్గింగ్ ఫేస్ క్లౌడ్ ఎన్విరాన్మెంట్‌లో కరెంట్ ఫోల్డర్ లొకేషన్‌ను ఆటోమేటిక్‌గా తీసుకుంటుంది
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.dirname(os.path.abspath(__file__)).strip()
     
     venv_python = os.path.join(current_dir, "venv", "bin", "python")
     if not os.path.exists(venv_python):
@@ -344,7 +344,7 @@ def run_agent_scenario(scenario: str, project_path: str = None) -> tuple:
     try:
         result = subprocess.run(
             [venv_python, run_script, scenario],
-            capture_output=True, text=True, cwd=current_dir, timeout=120,
+            capture_output=True, text=True, cwd=os.getcwd().strip(), timeout=120,
             env=current_env
         )
         return result.stdout + result.stderr, result.returncode == 0
@@ -402,9 +402,9 @@ with st.sidebar:
     # లోకల్ పాత్‌లతో పనిలేకుండా క్లౌడ్ ఆటో-డిటెక్షన్ కోసం అప్‌డేట్
     if st.session_state.llm_provider == "ollama":
         st.markdown("**⚙️ Project Path**")
-        project_path = st.text_input("Path", value=os.getcwd(), label_visibility="collapsed")
+        project_path = st.text_input("Path", value=os.getcwd(), label_visibility="collapsed").strip()
     else:
-        project_path = os.getcwd()
+        project_path = os.getcwd().strip()
 
     st.markdown('<hr class="cyber-divider">', unsafe_allow_html=True)
     st.markdown("**📋 Select Scenario**")
