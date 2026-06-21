@@ -7,6 +7,7 @@ from datetime import datetime
 from openai import OpenAI
 from dotenv import load_dotenv
 
+
 # Load .env file
 load_dotenv()
 # Detect if running on Hugging Face
