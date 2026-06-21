@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 
 # Load .env file
 load_dotenv()
-
+# Detect if running on Hugging Face
+IS_HF = os.getenv("SPACE_ID") is not None
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="CyberGuard AI",
@@ -470,26 +471,38 @@ with tab1:
         </div>""", unsafe_allow_html=True)
         main_run = st.button(f"▶ EXECUTE  {selected_scenario}", key="main_run")
         if main_run or sidebar_run:
-            st.session_state.scan_count += 1
-            add_log(f"Starting: {selected_scenario}", "info")
-            if st.session_state.llm_provider == "nim" and selected_scenario in ["THREAT_ANALYSIS", "LOG_INVESTIGATION"]:
-                with st.spinner("⚡ NVIDIA NIM AI analyzing..."):
-                    result = nim_chat(
-                        f"Perform a {selected_scenario.replace('_',' ')} and explain what you find.",
-                        "You are an expert cybersecurity analyst. Format your response with sections: THREAT ASSESSMENT, INDICATORS, RECOMMENDATIONS."
-                    )
-                    st.session_state.last_output = result
-                    add_log(f"{selected_scenario} completed via NIM ✅", "ok")
+    st.session_state.scan_count += 1
+    add_log(f"Starting: {selected_scenario}", "info")
+
+    if IS_HF:
+        # HF Cloud — NIM only
+        with st.spinner("⚡ NVIDIA NIM AI analyzing..."):
+            result = nim_chat(
+                f"You are a cybersecurity agent. Perform this security task: {selected_scenario.replace('_',' ')}. Provide detailed analysis.",
+                "You are an expert cybersecurity analyst and SOC agent. Perform the requested security task thoroughly."
+            )
+            st.session_state.last_output = result
+            add_log(f"{selected_scenario} completed via NIM ✅", "ok")
+    elif st.session_state.llm_provider == "nim" and selected_scenario in ["THREAT_ANALYSIS", "LOG_INVESTIGATION"]:
+        # Local NIM scenarios
+        with st.spinner("⚡ NVIDIA NIM AI analyzing..."):
+            result = nim_chat(
+                f"Perform a {selected_scenario.replace('_',' ')} and explain what you find.",
+                "You are an expert cybersecurity analyst. Format: THREAT ASSESSMENT, INDICATORS, RECOMMENDATIONS."
+            )
+            st.session_state.last_output = result
+            add_log(f"{selected_scenario} completed via NIM ✅", "ok")
+    else:
+        # Local Ollama
+        with st.spinner(f"🤖 Agent running {selected_scenario}..."):
+            output, success = run_agent_scenario(selected_scenario, project_path)
+            st.session_state.last_output = output
+            if success or "TERMINATED" in output:
+                add_log(f"{selected_scenario} completed ✅", "ok")
             else:
-                with st.spinner(f"🤖 Agent running {selected_scenario}..."):
-                    output, success = run_agent_scenario(selected_scenario, project_path)
-                    st.session_state.last_output = output
-                    if success or "TERMINATED" in output:
-                        add_log(f"{selected_scenario} completed ✅", "ok")
-                    else:
-                        add_log(f"{selected_scenario} had issues", "warn")
-                        st.session_state.threat_count += 1
-            st.rerun()
+                add_log(f"{selected_scenario} had issues", "warn")
+                st.session_state.threat_count += 1
+    st.rerun()
 
     with col_right:
         st.markdown("### 📟 Agent Output")
