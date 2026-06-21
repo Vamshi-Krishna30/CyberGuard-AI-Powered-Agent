@@ -1,6 +1,7 @@
 import streamlit as st
 import subprocess
 import os
+import sys
 import requests
 from datetime import datetime
 from openai import OpenAI
@@ -39,7 +40,7 @@ html,body,[data-testid="stApp"]{background:var(--bg)!important;color:var(--text)
 #MainMenu,footer{visibility:hidden!important}
 .stButton>button{background:linear-gradient(135deg,#003d66,#006699)!important;color:#00d4ff!important;border:1px solid #00d4ff!important;border-radius:6px!important;font-family:var(--mono)!important;font-size:13px!important;letter-spacing:1px!important;padding:10px 28px!important;transition:all .2s!important;width:100%}
 .stButton>button:hover{background:linear-gradient(135deg,#005588,#0088cc)!important;box-shadow:0 0 16px #00d4ff55!important;color:#00ff88!important;border-color:#00ff88!important}
-.stTextInput>div>div>input,.stTextArea>div>div>textarea{background:#060d1a!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:6px!important;font-family:var(--mono)!important;font-size:13px!important}
+.stTextInput>div>div>input,.stTextArea>div>div>textarea{background:#060d1a!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:6px!important;font-family:var(--mono);font-size:13px}
 .stTextInput>div>div>input:focus,.stTextArea>div>div>textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 8px #00d4ff33!important}
 .stSelectbox div[data-baseweb="select"]>div{background:#060d1a!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:6px!important;font-family:var(--mono)!important;font-size:13px!important}
 [data-testid="stRadio"] label{font-family:var(--mono)!important;color:var(--text)!important;font-size:13px!important}
@@ -120,7 +121,6 @@ def nim_chat(user_message: str, system_prompt: str = None) -> str:
 
 # ── VirusTotal Functions ───────────────────────────────────────────────────────
 def vt_scan_ip(ip: str, api_key: str) -> dict:
-    """Scan IP address on VirusTotal"""
     url = f"https://www.virustotal.com/api/v3/ip_addresses/{ip}"
     headers = {"x-apikey": api_key}
     try:
@@ -137,7 +137,6 @@ def vt_scan_ip(ip: str, api_key: str) -> dict:
         return {"error": str(e)}
 
 def vt_scan_url(url_target: str, api_key: str) -> dict:
-    """Scan URL on VirusTotal"""
     import base64
     url_id = base64.urlsafe_b64encode(url_target.encode()).decode().strip("=")
     url = f"https://www.virustotal.com/api/v3/urls/{url_id}"
@@ -147,7 +146,6 @@ def vt_scan_url(url_target: str, api_key: str) -> dict:
         if r.status_code == 200:
             return r.json()
         elif r.status_code == 404:
-            # Submit for scanning first
             submit_url = "https://www.virustotal.com/api/v3/urls"
             payload = {"url": url_target}
             r2 = requests.post(submit_url, headers=headers, data=payload, timeout=15)
@@ -162,7 +160,6 @@ def vt_scan_url(url_target: str, api_key: str) -> dict:
         return {"error": str(e)}
 
 def vt_scan_hash(file_hash: str, api_key: str) -> dict:
-    """Scan file hash on VirusTotal"""
     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
     headers = {"x-apikey": api_key}
     try:
@@ -179,7 +176,6 @@ def vt_scan_hash(file_hash: str, api_key: str) -> dict:
         return {"error": str(e)}
 
 def vt_scan_domain(domain: str, api_key: str) -> dict:
-    """Scan domain on VirusTotal"""
     url = f"https://www.virustotal.com/api/v3/domains/{domain}"
     headers = {"x-apikey": api_key}
     try:
@@ -196,11 +192,8 @@ def vt_scan_domain(domain: str, api_key: str) -> dict:
         return {"error": str(e)}
 
 def parse_vt_result(data: dict, scan_type: str) -> dict:
-    """Parse VirusTotal API response into clean format"""
-    if "error" in data:
-        return {"error": data["error"]}
-    if "info" in data:
-        return {"info": data["info"]}
+    if "error" in data: return {"error": data["error"]}
+    if "info" in data: return {"info": data["info"]}
 
     attrs = data.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
@@ -211,44 +204,31 @@ def parse_vt_result(data: dict, scan_type: str) -> dict:
     harmless    = stats.get("harmless", 0)
     total       = malicious + suspicious + undetected + harmless
 
-    # Determine risk level
     if malicious >= 10:
-        risk = "🔴 CRITICAL"
-        risk_color = "#ff4444"
+        risk, risk_color = "🔴 CRITICAL", "#ff4444"
     elif malicious >= 5:
-        risk = "🟠 HIGH"
-        risk_color = "#ff8844"
+        risk, risk_color = "🟠 HIGH", "#ff8844"
     elif malicious >= 2:
-        risk = "🟡 MEDIUM"
-        risk_color = "#ffaa00"
+        risk, risk_color = "🟡 MEDIUM", "#ffaa00"
     elif malicious == 1 or suspicious >= 2:
-        risk = "🟡 LOW"
-        risk_color = "#ffdd00"
+        risk, risk_color = "🟡 LOW", "#ffdd00"
     else:
-        risk = "🟢 CLEAN"
-        risk_color = "#00ff88"
+        risk, risk_color = "🟢 CLEAN", "#00ff88"
 
-    # Get malicious engines
     engines = attrs.get("last_analysis_results", {})
     bad_engines = [
         {"engine": k, "result": v.get("result", "malicious")}
         for k, v in engines.items()
         if v.get("category") in ["malicious", "suspicious"]
-    ][:10]  # top 10 only
+    ][:10]
 
     result = {
-        "risk": risk,
-        "risk_color": risk_color,
-        "malicious": malicious,
-        "suspicious": suspicious,
-        "undetected": undetected,
-        "harmless": harmless,
-        "total": total,
-        "bad_engines": bad_engines,
-        "scan_type": scan_type,
+        "risk": risk, "risk_color": risk_color,
+        "malicious": malicious, "suspicious": suspicious,
+        "undetected": undetected, "harmless": harmless,
+        "total": total, "bad_engines": bad_engines, "scan_type": scan_type,
     }
 
-    # Type-specific fields
     if scan_type == "IP":
         result["country"] = attrs.get("country", "Unknown")
         result["owner"]   = attrs.get("as_owner", "Unknown")
@@ -267,22 +247,13 @@ def parse_vt_result(data: dict, scan_type: str) -> dict:
     return result
 
 def display_vt_result(parsed: dict, target: str):
-    """Render VirusTotal result as HTML"""
     if "error" in parsed:
-        st.markdown(
-            f'<div class="vt-result-card danger"><span style="color:#ff4444;font-family:var(--mono)">❌ {parsed["error"]}</span></div>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="vt-result-card danger"><span style="color:#ff4444;font-family:var(--mono)">❌ {parsed["error"]}</span></div>', unsafe_allow_html=True)
         return
-
     if "info" in parsed:
-        st.markdown(
-            f'<div class="vt-result-card warn"><span style="color:#ffaa00;font-family:var(--mono)">ℹ️ {parsed["info"]}</span></div>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="vt-result-card warn"><span style="color:#ffaa00;font-family:var(--mono)">ℹ️ {parsed["info"]}</span></div>', unsafe_allow_html=True)
         return
 
-    # Risk header
     st.markdown(f"""
     <div class="vt-result-card">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
@@ -301,7 +272,6 @@ def display_vt_result(parsed: dict, target: str):
           </div>
         </div>
       </div>
-
       <div style="margin-bottom:12px">
         <span class="vt-stat vt-malicious">🔴 Malicious: {parsed['malicious']}</span>
         <span class="vt-stat vt-suspicious">🟡 Suspicious: {parsed['suspicious']}</span>
@@ -310,7 +280,6 @@ def display_vt_result(parsed: dict, target: str):
       </div>
     """, unsafe_allow_html=True)
 
-    # Type-specific info
     if parsed["scan_type"] == "IP":
         st.markdown(f"""
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
@@ -346,28 +315,37 @@ def display_vt_result(parsed: dict, target: str):
         </div>
         """, unsafe_allow_html=True)
 
-    # Bad engines
     if parsed["bad_engines"]:
         st.markdown('<div style="font-size:11px;color:#4a6080;font-family:var(--mono);margin-bottom:6px">🔴 Detected by engines:</div>', unsafe_allow_html=True)
-        engines_html = ""
-        for eng in parsed["bad_engines"]:
-            engines_html += f'<div class="engine-row engine-bad"><span>{eng["engine"]}</span><span>{eng["result"]}</span></div>'
+        engines_html = "".join([f'<div class="engine-row engine-bad"><span>{eng["engine"]}</span><span>{eng["result"]}</span></div>' for eng in parsed["bad_engines"]])
         st.markdown(f'<div style="max-height:160px;overflow-y:auto">{engines_html}</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div style="color:#00ff88;font-family:var(--mono);font-size:12px">✅ No engines flagged this as malicious</div>', unsafe_allow_html=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Run NVISO agent ───────────────────────────────────────────────────────────
-def run_agent_scenario(scenario: str, project_path: str) -> tuple:
-    venv_python = os.path.join(project_path, "venv", "Scripts", "python.exe")
+# ── Run NVISO agent (AUTOMATIC CLOUD DETECTION UPDATE) ────────────────────────
+def run_agent_scenario(scenario: str, project_path: str = None) -> tuple:
+    # హగ్గింగ్ ఫేస్ క్లౌడ్ ఎన్విరాన్మెంట్‌లో కరెంట్ ఫోల్డర్ లొకేషన్‌ను ఆటోమేటిక్‌గా తీసుకుంటుంది
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    venv_python = os.path.join(current_dir, "venv", "bin", "python")
     if not os.path.exists(venv_python):
-        venv_python = os.path.join(project_path, "venv", "bin", "python")
-    run_script = os.path.join(project_path, "run_agents.py")
+        venv_python = os.path.join(current_dir, "venv", "Scripts", "python.exe")
+    
+    # ఒకవేళ డోకర్ స్పేస్‌లో వర్చువల్ ఎన్విరాన్మెంట్ లేకపోతే బేస్ పైథాన్‌ను వాడుకుంటుంది
+    if not os.path.exists(venv_python):
+        venv_python = sys.executable
+
+    run_script = os.path.join(current_dir, "run_agents.py")
+    
+    # హగ్గింగ్ ఫేస్ సీక్రెట్ కీస్ (NIM_API_KEY) సబ్‌ప్రాసెస్‌కి అందేలా సిస్టమ్ ఎన్విరాన్మెంట్‌ను పంపుతున్నాం
+    current_env = os.environ.copy()
+    
     try:
         result = subprocess.run(
             [venv_python, run_script, scenario],
-            capture_output=True, text=True, cwd=project_path, timeout=120,
+            capture_output=True, text=True, cwd=current_dir, timeout=120,
+            env=current_env
         )
         return result.stdout + result.stderr, result.returncode == 0
     except subprocess.TimeoutExpired:
@@ -412,7 +390,6 @@ with st.sidebar:
     else:
         st.markdown('<span class="badge badge-ok">● OLLAMA</span><span class="badge badge-info">llama3.2</span>', unsafe_allow_html=True)
 
-    # VT API status
     vt_ok = bool(os.getenv("VT_API_KEY"))
     st.markdown(
         f'<div style="font-size:11px;color:{"#00ff88" if vt_ok else "#ffaa00"};font-family:var(--mono);margin:4px 0">'
@@ -422,17 +399,18 @@ with st.sidebar:
 
     st.markdown('<hr class="cyber-divider">', unsafe_allow_html=True)
 
+    # లోకల్ పాత్‌లతో పనిలేకుండా క్లౌడ్ ఆటో-డిటెక్షన్ కోసం అప్‌డేట్
     if st.session_state.llm_provider == "ollama":
         st.markdown("**⚙️ Project Path**")
-        project_path = st.text_input("Path", value=r"C:\Users\Vamshi Krishna\Desktop\my-security-agent\cyber-security-llm-agents", label_visibility="collapsed")
+        project_path = st.text_input("Path", value=os.getcwd(), label_visibility="collapsed")
     else:
-        project_path = r"C:\Users\Vamshi Krishna\Desktop\my-security-agent\cyber-security-llm-agents"
+        project_path = os.getcwd()
 
     st.markdown('<hr class="cyber-divider">', unsafe_allow_html=True)
     st.markdown("**📋 Select Scenario**")
     scenarios = {
-        "HELLO_AGENTS":      ("👋", "Hello Agents",      "Basic connectivity test"),
-        "THREAT_ANALYSIS":   ("🔍", "Threat Analysis",   "Analyze threat with NIM AI"),
+        "HELLO_AGENTS":     ("👋", "Hello Agents",      "Basic connectivity test"),
+        "THREAT_ANALYSIS":  ("🔍", "Threat Analysis",   "Analyze threat with NIM AI"),
         "LOG_INVESTIGATION": ("📄", "Log Investigation", "AI-powered log analysis"),
         "DETECT_EDR":        ("🛡️", "Detect EDR",        "Enumerate endpoint defenses"),
         "THREAT_HUNT":       ("🎯", "Threat Hunt",       "Active threat hunting"),
@@ -595,21 +573,11 @@ with tab3:
 
         with col_vt1:
             st.markdown("**🎯 Scan Target**")
-
             scan_type = st.selectbox("Scan Type", [
-                "🌐 IP Address",
-                "🔗 URL",
-                "🏠 Domain",
-                "🦠 File Hash (MD5/SHA1/SHA256)",
+                "🌐 IP Address", "🔗 URL", "🏠 Domain", "🦠 File Hash (MD5/SHA1/SHA256)",
             ], key="vt_scan_type")
 
-            type_map_vt = {
-                "🌐 IP Address": "IP",
-                "🔗 URL": "URL",
-                "🏠 Domain": "Domain",
-                "🦠 File Hash (MD5/SHA1/SHA256)": "Hash",
-            }
-
+            type_map_vt = {"🌐 IP Address": "IP", "🔗 URL": "URL", "🏠 Domain": "Domain", "🦠 File Hash (MD5/SHA1/SHA256)": "Hash"}
             placeholders = {
                 "🌐 IP Address": "e.g. 8.8.8.8 or 1.2.3.4",
                 "🔗 URL": "e.g. https://suspicious-site.com/malware",
@@ -617,15 +585,8 @@ with tab3:
                 "🦠 File Hash (MD5/SHA1/SHA256)": "e.g. d41d8cd98f00b204e9800998ecf8427e",
             }
 
-            vt_target = st.text_input(
-                "Enter target to scan",
-                placeholder=placeholders.get(scan_type, "Enter value"),
-                key="vt_target_input"
-            )
-
+            vt_target = st.text_input("Enter target to scan", placeholder=placeholders.get(scan_type, "Enter value"), key="vt_target_input")
             vt_scan_btn = st.button("🔍 SCAN ON VIRUSTOTAL", key="vt_scan")
-
-            # NIM + VT combined analysis
             vt_nim_btn = st.button("⚡ VT + NIM COMBINED ANALYSIS", key="vt_nim_btn")
 
             st.markdown("""
@@ -639,7 +600,6 @@ with tab3:
 
         with col_vt2:
             st.markdown("**📊 Scan Results**")
-
             current_type = type_map_vt.get(scan_type, "IP")
 
             if vt_scan_btn and vt_target:
@@ -647,14 +607,10 @@ with tab3:
                 add_log(f"VT Scan: {current_type} — {vt_target}", "info")
 
                 with st.spinner(f"🦠 Scanning {vt_target} on VirusTotal..."):
-                    if current_type == "IP":
-                        raw = vt_scan_ip(vt_target.strip(), vt_key)
-                    elif current_type == "URL":
-                        raw = vt_scan_url(vt_target.strip(), vt_key)
-                    elif current_type == "Domain":
-                        raw = vt_scan_domain(vt_target.strip(), vt_key)
-                    else:
-                        raw = vt_scan_hash(vt_target.strip(), vt_key)
+                    if current_type == "IP": raw = vt_scan_ip(vt_target.strip(), vt_key)
+                    elif current_type == "URL": raw = vt_scan_url(vt_target.strip(), vt_key)
+                    elif current_type == "Domain": raw = vt_scan_domain(vt_target.strip(), vt_key)
+                    else: raw = vt_scan_hash(vt_target.strip(), vt_key)
 
                     parsed = parse_vt_result(raw, current_type)
                     st.session_state.vt_result = {"parsed": parsed, "target": vt_target, "type": current_type}
@@ -666,7 +622,6 @@ with tab3:
                         add_log(f"VT Scan complete: {vt_target} — {parsed.get('risk','Unknown')} ✅", "ok")
                     else:
                         add_log(f"VT Scan error: {parsed.get('error','Unknown')}", "warn")
-
                 st.rerun()
 
             elif vt_nim_btn and vt_target:
@@ -674,68 +629,40 @@ with tab3:
                 add_log(f"VT+NIM Combined: {current_type} — {vt_target}", "info")
 
                 with st.spinner(f"🦠 Scanning + 🤖 AI Analyzing..."):
-                    # VT Scan
-                    if current_type == "IP":
-                        raw = vt_scan_ip(vt_target.strip(), vt_key)
-                    elif current_type == "URL":
-                        raw = vt_scan_url(vt_target.strip(), vt_key)
-                    elif current_type == "Domain":
-                        raw = vt_scan_domain(vt_target.strip(), vt_key)
-                    else:
-                        raw = vt_scan_hash(vt_target.strip(), vt_key)
+                    if current_type == "IP": raw = vt_scan_ip(vt_target.strip(), vt_key)
+                    elif current_type == "URL": raw = vt_scan_url(vt_target.strip(), vt_key)
+                    elif current_type == "Domain": raw = vt_scan_domain(vt_target.strip(), vt_key)
+                    else: raw = vt_scan_hash(vt_target.strip(), vt_key)
 
                     parsed = parse_vt_result(raw, current_type)
                     st.session_state.vt_result = {"parsed": parsed, "target": vt_target, "type": current_type}
 
-                    # NIM Analysis with VT context
-                    vt_context = f"""
-VirusTotal scan results for {current_type}: {vt_target}
-- Risk Level: {parsed.get('risk','Unknown')}
-- Malicious detections: {parsed.get('malicious',0)}/{parsed.get('total',0)} engines
-- Suspicious: {parsed.get('suspicious',0)}
-- Bad engines: {[e['engine'] for e in parsed.get('bad_engines',[])]}
-"""
-                    nim_result = nim_chat(
-                        f"Based on these VirusTotal results, provide a detailed threat analysis:\n{vt_context}\nProvide: threat assessment, attack patterns, risk to organization, and remediation steps.",
-                        "You are a senior SOC analyst. Analyze VirusTotal data and provide actionable threat intelligence report."
-                    )
+                    vt_context = f"VirusTotal scan results for {current_type}: {vt_target}\n- Risk Level: {parsed.get('risk','Unknown')}\n- Malicious detections: {parsed.get('malicious',0)}/{parsed.get('total',0)} engines\n- Suspicious: {parsed.get('suspicious',0)}"
+                    nim_result = nim_chat(f"Based on these VirusTotal results, provide a detailed threat analysis:\n{vt_context}\nProvide: threat assessment, attack patterns, risk to organization, and remediation steps.", "You are a senior SOC analyst.")
                     st.session_state.last_output = nim_result
 
                     if parsed.get("malicious", 0) > 0:
                         st.session_state.threat_count += 1
                         add_log(f"THREAT: {vt_target} flagged by {parsed['malicious']} engines 🔴", "err")
                     add_log("VT+NIM Combined analysis complete ✅", "ok")
-
                 st.rerun()
 
             elif (vt_scan_btn or vt_nim_btn) and not vt_target:
                 st.warning("Please enter a target to scan!")
 
-            # Display results
             if st.session_state.vt_result:
                 r = st.session_state.vt_result
                 display_vt_result(r["parsed"], r["target"])
-
-                # Show NIM analysis if combined
                 if st.session_state.last_output and vt_nim_btn:
                     st.markdown("**🤖 NIM AI Analysis:**")
-                    st.markdown(
-                        f'<div class="terminal" style="min-height:150px;max-height:250px">'
-                        f'<span class="t-prompt">{st.session_state.last_output.replace(chr(10),"<br>")}</span>'
-                        f'</div>', unsafe_allow_html=True
-                    )
+                    st.markdown(f'<div class="terminal" style="min-height:150px;max-height:250px"><span class="t-prompt">{st.session_state.last_output.replace(chr(10),"<br>")}</span></div>', unsafe_allow_html=True)
             else:
-                st.markdown("""
-                <div class="terminal" style="min-height:300px">
+                st.markdown("""<div class="terminal" style="min-height:300px">
 <span class="t-info">🦠 VirusTotal Scanner Ready</span>
 <span class="t-info">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
-<span class="t-warn">Enter an IP, URL, Domain or Hash</span>
-<span class="t-warn">on the left and click SCAN</span>
-
-<span class="t-info">70+ AV engines will check your target</span>
-<span class="t-info">in real-time for threats...</span>
-<span class="t-prompt">Ready ▌</span>
-                </div>""", unsafe_allow_html=True)
+<span class="t-warn">Enter an IP, URL, Domain or Hash on the left and click SCAN</span>
+<span class="t-info">70+ AV engines will check your target in real-time for threats...</span>
+<span class="t-prompt">Ready ▌</span></div>""", unsafe_allow_html=True)
 
 # ── TAB 4 — Activity Log ──────────────────────────────────────────────────────
 with tab4:
